@@ -45,3 +45,15 @@ CREATE TABLE teams (
     tournament_id BIGINT NOT NULL REFERENCES tournaments(tournament_id)
 );
 
+ALTER TABLE teams ADD group_id BIGINT REFERENCES groups(group_id);
+
+CREATE TABLE groups (
+    group_id BIGSERIAL PRIMARY KEY,
+    team_id1 BIGINT REFERENCES teams(team_id),
+    team_id2 BIGINT REFERENCES teams(team_id),
+    team_id3 BIGINT REFERENCES teams(team_id),
+    team_id4 BIGINT REFERENCES teams(team_id),
+    team_id5 BIGINT REFERENCES teams(team_id),
+    team_id6 BIGINT REFERENCES teams(team_id)
+);
+ALTER TABLE groups add tournament_id BIGINT NOT NULL REFERENCES tournaments(tournament_id);

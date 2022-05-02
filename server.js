@@ -180,11 +180,15 @@ const createTeams = async(tournament_id) => {
             teams.push(team);
         }
         // console.log(members);
-        // console.log(teams);
-        db("teams").insert(teams).returning("team_id").then(id => console.log("inserted"))
+        //console.log(teams);
+
+        return teams;
     })
-    .then(a => true)
-    
+    .then(teams => {
+        db("teams").insert(teams).returning("team_id").then(() => true);
+    })
+    .then(() => true)
+    .catch(err => console.log(err));
 }
 //async so it returns a promise
 const createGroups = async (tournament_id, userNumberOfGroups) => {
@@ -194,14 +198,15 @@ const createGroups = async (tournament_id, userNumberOfGroups) => {
         let groups = [];
         let numberOfGroups = userNumberOfGroups;
         const j = teams.length;
+        //create numberOfGroups amount of empty arrays in the groups array
         for(let i = 0; i < numberOfGroups; i++){
             groups.push([]);
         }
         let groupNumber = 0;
+        //randomly get an INT as index then select a team with that and assign it to a group array (increments the group array to equally distribute the teams) 
         for(let i = 0; i < j; i++){
             let index = getRandomInt(0, teams.length-1);
             let randomTeam = teams[index];
-            // console.log(groups[groupNumber]);
             groups[groupNumber].push(randomTeam);
             teams.splice(index, 1);
             if(groupNumber < groups.length-1){
@@ -211,35 +216,74 @@ const createGroups = async (tournament_id, userNumberOfGroups) => {
                 groupNumber = 0;
             }
         }
-
-        console.log(teams);
-        console.log(groups);
-
-
+        // console.log(groups);
+        return groups;
     })
-    .then(a => true);
-    
+    .then(groups => {
+        let newGroups = groups.map(group => {
+            // console.log("-----------")
+            return group.map((member, i) => {
+                // console.log(member.team_id);
+                let name = "team_id" + (i+1);
+                // console.log(name);
+                // console.log({[name]: member.team_id});
+                return {[name]: member.team_id}
+            })
+        })
+        // console.log(newGroups);
+        //create the finalGroups, 
+        let finalGroups = [];
+        for(let j = 0; j < newGroups.length; j++){
+            let groupObj = {};
+            for(let i = 1; i <= newGroups[j].length; i++){
+                let propName = "team_id" + i;
+                //this adds a new property to the groupObj to match the database schema
+                groupObj[propName] = newGroups[j][i-1][Object.keys(newGroups[j][i-1])[0]];
+            }
+            //console.log(groupObj);
+            groupObj["tournament_id"] = tournament_id;
+            finalGroups.push(groupObj);
+        }
+        //console.log(finalGroups);
+        db("groups").insert(finalGroups).returning("team_id1").then(() => true);
+    })
+    .then(() => true)
+    .catch(err => console.log(err));
 }
 
-//not async await because we dont need it
-const createMatchups = () => {
-    console.log("Matchups");
+
+
+const  createMatchups = async () => {
+    return //select groups
+    
+    // .then(() => true)
+    // .catch((err) => console.log(err));
 }
+
+
+
+
+
+
+
 //create final tournament with min. 12 teams and quarter finals 
 app.post("/createFinalTournament", (req, res) => {
-    const {numberOfGroups, numberOfTables, tournament_id} = req.body;
-    
+    const {numberOfGroups, numberOfTables, tournament_id} = req.body;    
     const creation = async () => {
         if(await createTeams(tournament_id) === true){
             if(await createGroups(tournament_id, numberOfGroups) === true){
-                createMatchups();
+                if(await createMatchups()){
+                    res.json("worked fine");
+                }
             }
+
+            ///debug that async code seperately in the test file
         }
             
     } 
     creation();
     //some new text
-    res.json("Hello there");
+    
 })
 
 

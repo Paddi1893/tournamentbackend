@@ -191,7 +191,7 @@ const createTeams = async(tournament_id) => {
     .catch(err => console.log(err));
 }
 //async so it returns a promise
-const createGroups = async (tournament_id, userNumberOfGroups) => {
+const createGroupsMatchups = async (tournament_id, userNumberOfGroups, numberOfTables) => {
     //number of Groups min. 4 and teams min 12 to play with quarter finals -> maybe select fewer users
     return db.select("team_id").from("teams").where("tournament_id", "=", tournament_id)
     .then(teams => {
@@ -217,20 +217,18 @@ const createGroups = async (tournament_id, userNumberOfGroups) => {
             }
         }
         // console.log(groups);
+
         return groups;
     })
     .then(groups => {
         let newGroups = groups.map(group => {
-            // console.log("-----------")
             return group.map((member, i) => {
-                // console.log(member.team_id);
                 let name = "team_id" + (i+1);
-                // console.log(name);
-                // console.log({[name]: member.team_id});
                 return {[name]: member.team_id}
             })
         })
-        // console.log(newGroups);
+        
+        
         //create the finalGroups, 
         let finalGroups = [];
         for(let j = 0; j < newGroups.length; j++){
@@ -244,55 +242,135 @@ const createGroups = async (tournament_id, userNumberOfGroups) => {
             groupObj["tournament_id"] = tournament_id;
             finalGroups.push(groupObj);
         }
-        //console.log(finalGroups);
-        db("groups").insert(finalGroups).returning("team_id1").then(() => true);
+        //insert into database with the desired schema
+        db("groups").insert(finalGroups).returning('group_id')
+        .then(() => true)
+        .catch(err => console.log(err));
+
+        return newGroups;
+    })
+    .then(groups => {
+        // --- MATCHUPS --- //
+        // console.log("matchups")
+        // console.log(groups); //[ [{}, {}], [], ...]
+        //at least 3 objects 
+        let matchupsAllGroups = groups.map(group => {
+            /*
+            we have n teams -> at least 3 
+            a team needs to wait at max. 2 games until they play again to prevent long breaks
+            - matchup data structure should look like this {team1_id, team2_id, tournament_id, table}
+            */
+            //group = [{}, {}]
+            let numberOfMatchups = 0;
+            for(let i = 1; i <= group.length; i++){
+                numberOfMatchups += (group.length-i);
+            }
+
+            let matchups = [];
+
+                        
+            for(let i = 0; i < group.length-1; i++){
+                //keep the tables number up to date
+                let current = group[i][Object.keys(group[i])];
+                let iterator = i;
+                let count = group.length-1-i; 
+                //works with 3 teams in one group
+                for(let j = 0; j < count; j++){
+                    
+                    let team_id1 = current;
+                    let team_id2 = group[iterator+1][Object.keys(group[iterator+1])];
+
+                    matchups.push({
+                        team_id1: team_id1,
+                        team_id2: team_id2,
+                        tournament_id: tournament_id 
+                    })
+                    iterator++;
+                    
+                }
+                
+            }
+            // console.log(matchups);
+
+            if(matchups.length < 4){
+                return matchups;
+            }
+
+            let shuffleMatchups = [];
+
+            let j = matchups.length;
+            for(let i = 0; i < j; i++){
+                let index = getRandomInt(0, matchups.length-1);
+                shuffleMatchups.push(matchups[index]);
+                matchups.splice(index, 1);
+            }
+            return shuffleMatchups;
+        })
+
+        console.log(matchupsAllGroups);
+
+        let finalMatchups = [];
+        let totalNumberOfMatchups = 0;
+        matchupsAllGroups.forEach(element => totalNumberOfMatchups += element.length);
+        
+        let groupCount = 0;
+        let j = 0;
+        let table_id = 1;
+        for(let i = 0; i < totalNumberOfMatchups; i++){
+            if(groupCount >= userNumberOfGroups){
+                groupCount = 0;
+                j++;
+            }
+            if(table_id > numberOfTables ){
+                table_id = 1;
+            }
+            if(j > matchupsAllGroups[groupCount.length]-1){
+                continue;
+            }
+
+            let obj = matchupsAllGroups[groupCount][j];
+            obj["table_id"] = table_id;
+
+            finalMatchups.push(obj)
+
+            groupCount++;
+            table_id++;
+        }
+
+        console.log(finalMatchups);
+        
+
+        //insert in database
+
+        db("matchups").insert(finalMatchups).returning('matchup_id').then((data)=> console.log(data));
+        
     })
     .then(() => true)
     .catch(err => console.log(err));
 }
-
-
-
-const  createMatchups = async () => {
-    return //select groups
-    
-    // .then(() => true)
-    // .catch((err) => console.log(err));
-}
-
-
-
-
-
-
 
 //create final tournament with min. 12 teams and quarter finals 
 app.post("/createFinalTournament", (req, res) => {
     const {numberOfGroups, numberOfTables, tournament_id} = req.body;    
     const creation = async () => {
         if(await createTeams(tournament_id) === true){
-            if(await createGroups(tournament_id, numberOfGroups) === true){
-                if(await createMatchups()){
-                    res.json("worked fine");
-                }
+            if(await createGroupsMatchups(tournament_id, numberOfGroups, numberOfTables) === true){
+                res.json("worked");
             }
-
-            ///debug that async code seperately in the test file
+            else{
+                res.status(500).json("failed");
+            }
+        }else{
+            res.status(500).json("failed");
         }
             
     } 
     creation();
-    //some new text
-    
 })
 
-
-
-    //create teams
-    //create groups -> number is given
-    //create matchups
-
-
+app.get("/selectTournament", (req,res) => {
+    
+})
 
 app.listen(3000, () => {
     console.log("app is running on port 3000");

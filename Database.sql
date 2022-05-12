@@ -57,3 +57,14 @@ CREATE TABLE groups (
     team_id6 BIGINT REFERENCES teams(team_id)
 );
 ALTER TABLE groups add tournament_id BIGINT NOT NULL REFERENCES tournaments(tournament_id);
+
+CREATE TABLE matchups (
+    matchup_id BIGSERIAL PRIMARY KEY,
+    team_id1 BIGINT NOT NULL REFERENCES teams(team_id),
+    team_id2 BIGINT NOT NULL REFERENCES teams(team_id),
+    scoreTeam1 SMALLINT,
+    scoreTeam2 SMALLINT,
+    winner_id BIGINT,
+    table_id SMALLINT, 
+    tournament_id BIGINT NOT NULL REFERENCES tournaments(tournament_id)
+);

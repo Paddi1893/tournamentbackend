@@ -68,3 +68,19 @@ CREATE TABLE matchups (
     table_id SMALLINT, 
     tournament_id BIGINT NOT NULL REFERENCES tournaments(tournament_id)
 );
+
+update matchups set matchup_played = true where matchup_id = 96;
+update matchups set matchup_played = true where matchup_id = 85;
+update matchups set matchup_played = true where matchup_id = 86;
+update matchups set matchup_played = true where matchup_id = 88;
+update matchups set matchup_played = true where matchup_id = 87;
+
+update teams set goals = null;
+update teams set points = null;
+update matchups set scoreteam1 = null;
+update matchups set scoreteam2 = null;
+update matchups set matchup_played = false;
+
+ALTER TABLE matchups DROP COLUMN matchup_played;
+
+ALTER TABLE matchups ADD COLUMN matchup_played bool DEFAULT false;

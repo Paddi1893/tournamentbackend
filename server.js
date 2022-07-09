@@ -179,8 +179,7 @@ const createTeams = async(tournament_id) => {
             let team = {id_member1: member1.member_id, id_member2: member2.member_id, tournament_id: tournament_id}
             teams.push(team);
         }
-        // console.log(members);
-        //console.log(teams);
+        
 
         return teams;
     })
@@ -368,7 +367,320 @@ app.post("/createFinalTournament", (req, res) => {
     creation();
 })
 
-app.get("/selectTournament", (req,res) => {
+app.get("/fetchGroups/:id", (req,res) => {
+    const {id} = req.params;
+    db.select("*").from("groups").where("tournament_id", "=", id)
+    .then(data => {
+        //remove null columns
+        groups = data.map(group => {
+            Object.keys(group).forEach(key => {
+                if (group[key] === null) {
+                  delete group[key];
+                }
+            });
+            return group;
+        })
+        res.json(groups);
+    })
+    .catch(err => {
+        res.status(400).json("did not work")
+        console.log(err);
+    })
+})
+
+app.post("/fetchTeams", (req, res) => {
+    /*
+        thats the current format of teamData_ids 
+        0: (3) ['991', '983', '984']
+        1: (3) ['988', '985', '994']
+        2: (3) ['992', '990', '993']
+        3: (3) ['986', '987', '989']
+        "replace" the team_ids with arrays of all important information (+ the id)
+    */
+    const {team_ids, tournament_id} = req.body;
+    // console.log(team_ids);
+
+    //fetch only points, standing, goals from the teams table
+    db.select("*").from("teams").where("tournament_id", "=", tournament_id)
+    .then(data => {
+        let final = [];
+        team_ids.map(group => {
+            final.push(group.map(team_id => {
+                return allTeamData = data.find(x => x.team_id === team_id )
+            }))
+        })
+        return final;
+    })
+    .then(groups => {
+        let final = [];
+        //fetch the names here from the members table and add to the final Array
+        db.select("*").from("members").where("tournament_id", "=", tournament_id)
+        .then(members => {
+            groups.map(group => {
+                final.push(group.map((team, i) => {
+                    
+                    let firstMember = members.find(x => x.member_id === team.id_member1);
+                    delete firstMember.member_id;
+                    delete firstMember.tournament_id;
+                    
+                    let secondMember = members.find(x => x.member_id === team.id_member2);
+                    delete secondMember.member_id;
+                    delete secondMember.tournament_id;
+                    
+                    team.name = firstMember.first_name + " " + firstMember.last_name + " + " + secondMember.first_name + " " + secondMember.last_name;
+                    return team;
+                }))
+            })    
+            res.json(final);
+        })
+    })
+    .catch(err => {
+        res.status(500).json("something went wrong")
+        console.log(err);
+    })
+})
+
+app.get("/fetchMatchups/:tournament_id", (req, res) => {
+    //send the matchups back with team names
+    const {tournament_id} = req.params;
+    let Matchups; 
+    let Teams; 
+
+    db.select("*").from("matchups").where("tournament_id", "=", tournament_id)
+    .then(matchups => {
+        db.select("*").from("members").where("tournament_id", "=", tournament_id)
+        .then(members => {
+            // Members = members;
+            
+            db.select("*").from("teams").where("tournament_id", "=", tournament_id)
+            .then(teams => {
+                Teams = teams.map(team => {
+                    delete team.points;
+                    delete team.goals;
+                    delete team.standing;
+                    return team;
+                });
+                // console.log(Teams);
+                Matchups = matchups.map(matchup => {
+                    if(matchup.scoreteam1 === null){
+                        matchup.scoreteam1 = "";
+                    }
+                    if(matchup.scoreteam2 === null){
+                        matchup.scoreteam2 = "";
+                    }
+
+    
+                    let team1 = Teams.find(x => x.team_id === matchup.team_id1); 
+                    let team2 = Teams.find(x => x.team_id === matchup.team_id2);
+                    
+                    // console.log(team1);
+                    // console.log(team2);
+                    //TEAM 1                    
+                    let firstMemberT1 = members.find(x => x.member_id === team1.id_member1);
+                    let secondMemberT1 = members.find(x => x.member_id === team1.id_member2);
+                    matchup.nameTeam1 = firstMemberT1.first_name + " " + firstMemberT1.last_name + " + " + secondMemberT1.first_name + " " + secondMemberT1.last_name;
+                    
+                    //TEAM 2
+                    let firstMemberT2 = members.find(x => x.member_id === team2.id_member1);
+                    let secondMemberT2 = members.find(x => x.member_id === team2.id_member2);
+                    matchup.nameTeam2 = firstMemberT2.first_name + " " + firstMemberT2.last_name + " + " + secondMemberT2.first_name + " " + secondMemberT2.last_name;
+
+                    // console.log(matchup);
+
+                    return matchup;
+                    //add the names to the matchups object
+                })
+                
+                res.json(Matchups);
+            })
+            
+        })        
+        
+    })
+    .catch(err => {
+        res.status(500).json("something went wrong")
+        console.log(err);
+    })
+        
+})
+
+app.get("/getTournamentSelection/:user_id", (req,res) => {
+    const {user_id} = req.params;
+    db.select("tournament_id", "tournament_name").from("tournaments").where("user_id", "=", user_id)
+    .then(data => {
+        res.json(data);
+    })
+    .catch(err => {
+        res.status(500).json("something went wrong")
+        console.log(err);
+    })
+})
+
+
+const updateTeamStatsNew = async(team_id, score, matchup_id) => {
+    let currentGoals;
+    let currentPoints;
+    let winPoints = 0;
+    if(Number(score) === 10){
+        winPoints = 1;    
+    }
+
+    return db.select("points", "goals").from("teams").where("team_id", "=", team_id)
+    .then(data => {
+        // console.log(data[0]);
+        if(data[0].points === null){
+            currentPoints = 0;
+        }
+        else{
+            currentPoints = data[0].points;
+        }
+        if(data[0].goals === null){
+            currentGoals = 0;
+        }
+        else {
+            currentGoals = data[0].goals;
+        }
+        db("teams")
+            .where("team_id", "=", team_id)
+            .update({
+                points: Number(currentPoints) + Number(winPoints),
+                goals: Number(currentGoals) + Number(score)
+            })
+            .then(() => {
+                return true;
+            })
+            .catch(err => {
+                console.log(err);
+            })
+    })
+    .then(() => {
+        //this updates the matchup as being "finished"
+        db("matchups")
+            .where("matchup_id", "=", matchup_id)
+            .update({
+                matchup_played: true
+            })
+            .then(()=> true)
+            .catch(err => {
+                console.log(err);
+            })        
+    })
+    .then(() => true)
+    .catch(err => {
+        console.log(err);
+    })
+}
+
+const updateTeamStatsOld = async(matchup_id) => {
+    //get the matchup data -> update -> decrease score and points -> take new data and call the updateTeamStatsNew but in the other function
+    let scoreTeam1;
+    let scoreTeam2;
+    return db.select("scoreteam1", "scoreteam2", "team_id1", "team_id2").from("matchups").where("matchup_id", "=", matchup_id)
+        .then(data => {
+            console.log(data[0]);
+            db("matchups")
+            .where("matchup_id", "=", matchup_id)
+            .update({
+                scoreteam1: null,
+                scoreteam2: null,
+                matchup_played: false
+            })
+            
+        })
+        .then(() => true)
+        .catch(err => {
+            console.log(err);
+        })
+}
+
+app.post("/updateMatchup", (req,res) => {
+    const {scoreTeam1, scoreTeam2, matchup_id} = req.body;
+    
+    db.select("matchup_played").from("matchups").where("matchup_id", "=", matchup_id)
+    .then(value => {
+        if(value[0].matchup_played === false){
+            db("matchups")
+                .where("matchup_id", "=", matchup_id)
+                .update({
+                    scoreteam1: scoreTeam1,
+                    scoreteam2: scoreTeam2,
+                }, ["team_id1", "team_id2"])
+                .then((team_ids) => {
+                    const team_id1 = team_ids[0].team_id1;
+                    const team_id2 = team_ids[0].team_id2;
+                    const update = async () => {
+                            if(await updateTeamStatsNew(team_id1, scoreTeam1, matchup_id) && await updateTeamStatsNew(team_id2, scoreTeam2, matchup_id))
+                            {
+                                res.json("worked");
+                                //update the standings in the group
+                                // if(await updateGroupStandings()){
+                                //     res.json("worked")
+                                // }
+                            }
+                            else{
+                                res.status(500).json("failed");
+                            }      
+                    }
+                    update();
+                    //how do to this efficiently 
+                        //-> get the teams points and goals -> add them -> make a seperate function -> async -> call it two times with the ids
+                        //update somehow the standing of all teams based on the added information -> seperate function
+                        // 
+                })
+                .catch(err => {
+                    res.status(500).json("something went wrong")
+                    console.log(err);
+                })
+        }
+        else{
+            console.log("Hello");
+            // if we only update already present information
+            const update = async() => {
+                if(await updateTeamStatsOld(matchup_id))
+                {  
+                    db("matchups")
+                    .where("matchup_id", "=", matchup_id)
+                    .update({
+                        scoreteam1: scoreTeam1,
+                        scoreteam2: scoreTeam2,
+                    }, ["team_id1", "team_id2"])
+                    .then((team_ids) => {
+                        const team_id1 = team_ids[0].team_id1;
+                        const team_id2 = team_ids[0].team_id2;
+                        const update = async () => {
+                                if(await updateTeamStatsOld(team_id1, scoreTeam1, matchup_id) && await updateTeamStatsOld(team_id2, scoreTeam2, matchup_id))
+                                {
+                                    res.json("worked");
+                                    //update the standings in the group
+                                    // if(await updateGroupStandings()){
+                                    //     res.json("worked")
+                                    // }
+                                }
+                                else{
+                                    res.status(500).json("failed");
+                                }      
+                        }
+                        update();
+                        //how do to this efficiently 
+                            //-> get the teams points and goals -> add them -> make a seperate function -> async -> call it two times with the ids
+                            //update somehow the standing of all teams based on the added information -> seperate function
+                            // 
+                    })
+                    .catch(err => {
+                        res.status(500).json("something went wrong")
+                        console.log(err);
+                    })
+                }
+                else{
+                    res.status(500).json("failed");
+                }
+            } 
+            update();
+            
+        }
+    })
+
+
     
 })
 
